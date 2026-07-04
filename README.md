@@ -29,23 +29,29 @@ contributions are allowed only before the deadline and refunds only after.
 
 ## Optimizations
 
+### Phase 1
+
 - Client passes the fundraiser bump; verified with `derive_address` (no `find_program_address` at init).
 - ATAs (vault, maker) are created by the client; the program only validates them — no ATA-creation CPI.
 - Vault is pinned by its address, stored in the fundraiser account.
 - Redundant mint reads and accounts dropped from contribute / check / refund.
 - Unused deps removed (`pinocchio-log`, `pinocchio-associated-token-account`).
 
+### Phase 2 [Meant only for demonstration, hardcoding rent calculations is not a standard practice]
+
+- Rent-exempt lamports are compile-time constants — the `Rent::get()` sysvar is skipped on account creation.
+
 Contributor PDA derivation stays canonical (`find_program_address`) so the 10% per-wallet cap
 can't be bypassed with non-canonical bumps.
 
 Compute units (litesvm):
 
-| Instruction | Before | After |
-|---|---|---|
-| initialize | 19506 | 1896 |
-| contribute | 4575 | 4507 |
-| check_contributions | 17755 | 1496 |
-| refund | 4879 | 2048 |
+| Instruction | Before | Phase 1 | Phase 2 |
+|---|---|---|---|
+| initialize | 19506 | 1896 | 1774 |
+| contribute | 4575 | 4507 | 4383 |
+| check_contributions | 17755 | 1496 | 1496 |
+| refund | 4879 | 2048 | 2048 |
 
 ## Build & test
 

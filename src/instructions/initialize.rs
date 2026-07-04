@@ -2,13 +2,16 @@ use pinocchio::{
     AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
-    sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_system::instructions::CreateAccount;
 use pinocchio_token::state::{Account as TokenAccount, Mint};
 
-use crate::{constants::MIN_AMOUNT_TO_RAISE, error::FundraiserError, state::Fundraiser};
+use crate::{
+    constants::{MIN_AMOUNT_TO_RAISE, rent_exempt_lamports},
+    error::FundraiserError,
+    state::Fundraiser,
+};
 
 pub fn process_initialize_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
     let [
@@ -64,7 +67,7 @@ pub fn process_initialize_instruction(accounts: &mut [AccountView], data: &[u8])
     CreateAccount {
         from: maker,
         to: fundraiser_account,
-        lamports: Rent::get()?.try_minimum_balance(Fundraiser::LEN)?,
+        lamports: rent_exempt_lamports(Fundraiser::LEN as u64),
         space: Fundraiser::LEN as u64,
         owner: &crate::ID,
     }

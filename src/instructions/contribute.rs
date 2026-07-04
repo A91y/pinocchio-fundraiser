@@ -2,14 +2,14 @@ use pinocchio::{
     Address, AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
-    sysvars::{Sysvar, clock::Clock, rent::Rent},
+    sysvars::{Sysvar, clock::Clock},
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_system::instructions::CreateAccount;
 use pinocchio_token::instructions::Transfer;
 
 use crate::{
-    constants::{MAX_CONTRIBUTION_PERCENTAGE, PERCENTAGE_SCALER, SECONDS_TO_DAYS},
+    constants::{MAX_CONTRIBUTION_PERCENTAGE, PERCENTAGE_SCALER, SECONDS_TO_DAYS, rent_exempt_lamports},
     error::FundraiserError,
     state::{Contributor, Fundraiser},
 };
@@ -72,7 +72,7 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
         CreateAccount {
             from: contributor,
             to: contributor_account,
-            lamports: Rent::get()?.try_minimum_balance(Contributor::LEN)?,
+            lamports: rent_exempt_lamports(Contributor::LEN as u64),
             space: Contributor::LEN as u64,
             owner: &crate::ID,
         }

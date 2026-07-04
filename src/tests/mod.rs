@@ -393,4 +393,19 @@ mod tests {
         assert_eq!(token_balance(&ctx.svm, &ctx.vault), 100_000_000);
         assert_eq!(token_balance(&ctx.svm, &attacker_ata), 1_000_000);
     }
+
+    #[test]
+    fn rent_consts_match_runtime() {
+        use crate::constants::rent_exempt_lamports;
+        use crate::state::{Contributor, Fundraiser};
+        let svm = LiteSVM::new();
+        assert_eq!(
+            rent_exempt_lamports(Fundraiser::LEN as u64),
+            svm.minimum_balance_for_rent_exemption(Fundraiser::LEN)
+        );
+        assert_eq!(
+            rent_exempt_lamports(Contributor::LEN as u64),
+            svm.minimum_balance_for_rent_exemption(Contributor::LEN)
+        );
+    }
 }
