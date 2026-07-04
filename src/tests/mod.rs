@@ -406,4 +406,29 @@ mod tests {
         assert!(!send(&mut ctx.svm, ix, &contributor, &[&contributor]));
         assert!(!is_closed(&ctx.svm, &contributor_account));
     }
+
+    #[test]
+    fn refund_rejects_another_contributors_account() {
+        let mut ctx = initialize(1_000_000_000, 1).unwrap();
+
+        // victim contributes
+        let (victim, victim_ata) = new_contributor(&mut ctx, 500_000_000);
+        let (victim_account, _) = contributor_pda(&ctx.fundraiser, &victim.pubkey());
+        let c = contribute_ix(&ctx, &victim.pubkey(), &victim_account, &victim_ata, 100_000_000);
+        assert!(send(&mut ctx.svm, c, &victim, &[&victim]));
+
+        // attacker just needs their own ATA to receive stolen funds
+        let (attacker, attacker_ata) = new_contributor(&mut ctx, 1_000_000);
+
+        advance_days(&mut ctx.svm, 2);
+
+        // attacker signs as themselves but passes the victim's contributor_account
+        let ix = refund_ix(&ctx, &attacker.pubkey(), &victim_account, &attacker_ata);
+        assert!(!send(&mut ctx.svm, ix, &attacker, &[&attacker]));
+
+        // victim's account + the vault are untouched
+        assert!(!is_closed(&ctx.svm, &victim_account));
+        assert_eq!(token_balance(&ctx.svm, &ctx.vault), 100_000_000);
+        assert_eq!(token_balance(&ctx.svm, &attacker_ata), 1_000_000);
+    }
 }

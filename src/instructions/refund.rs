@@ -1,5 +1,5 @@
 use pinocchio::{
-    AccountView, ProgramResult,
+    Address, AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
     sysvars::{Sysvar, clock::Clock},
@@ -56,6 +56,17 @@ pub fn process_refund_instruction(accounts: &mut [AccountView], _data: &[u8]) ->
         &crate::ID.to_bytes(),
     );
     if expected_fundraiser != *fundraiser_key.as_array() {
+        return Err(ProgramError::InvalidSeeds);
+    }
+
+    // Bind the contributor account to the signer: it must be the PDA derived from
+    // (fundraiser, this signer). Without this, any signer could pass another
+    // contributor's account and drain their recorded amount to their own ATA.
+    let (expected_contributor, _) = Address::find_program_address(
+        &[b"contributor", fundraiser_key.as_ref(), contributor.address().as_ref()],
+        &crate::ID,
+    );
+    if &expected_contributor != contributor_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
