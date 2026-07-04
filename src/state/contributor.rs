@@ -1,13 +1,15 @@
 use pinocchio::{AccountView, error::ProgramError};
 
+// byte arrays keep alignment at 1 so the raw account buffer can be cast in place (zero-copy)
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Contributor {
     pub amount: [u8; 8],
+    pub bump: u8,
 }
 
 impl Contributor {
-    pub const LEN: usize = 8;
+    pub const LEN: usize = 8 + 1;
 
     pub fn from_account_info(account_info: &mut AccountView) -> Result<&mut Self, ProgramError> {
         let data = unsafe { account_info.borrow_unchecked_mut() };
@@ -23,5 +25,9 @@ impl Contributor {
 
     pub fn set_amount(&mut self, amount: u64) {
         self.amount.copy_from_slice(&amount.to_le_bytes());
+    }
+
+    pub fn set_bump(&mut self, bump: u8) {
+        self.bump = bump;
     }
 }

@@ -3,7 +3,6 @@ use pinocchio::{
     cpi::{Seed, Signer},
     error::ProgramError,
 };
-use pinocchio_associated_token_account::instructions::CreateIdempotent;
 use pinocchio_pubkey::derive_address;
 use pinocchio_token::{instructions::Transfer, state::Account as TokenAccount};
 
@@ -15,22 +14,23 @@ pub fn process_check_contributions_instruction(
 ) -> ProgramResult {
     let [
         maker,
-        mint_to_raise,
         fundraiser_account,
         vault,
         maker_ata,
-        token_program,
-        system_program,
-        _associated_token_program,
+        _token_program,
         _remaining_accounts @ ..,
     ] = accounts
     else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    let (amount_to_raise, bump) = {
+    if !maker.is_signer() {
+        return Err(ProgramError::MissingRequiredSignature);
+    }
+
+    let (amount_to_raise, bump, vault_pin) = {
         let f = Fundraiser::from_account_info(fundraiser_account)?;
-        (f.amount_to_raise(), f.bump)
+        (f.amount_to_raise(), f.bump, f.vault)
     };
 
     let expected_fundraiser = derive_address(
@@ -41,25 +41,14 @@ pub fn process_check_contributions_instruction(
     if expected_fundraiser != *fundraiser_account.address().as_array() {
         return Err(ProgramError::InvalidSeeds);
     }
-
-    CreateIdempotent {
-        funding_account: maker,
-        account: maker_ata,
-        wallet: maker,
-        mint: mint_to_raise,
-        system_program,
-        token_program,
+    if *vault.address().as_array() != vault_pin {
+        return Err(ProgramError::InvalidAccountData);
     }
-    .invoke()?;
 
     let vault_amount = {
         let v = TokenAccount::from_account_view(vault)?;
-        if v.mint() != mint_to_raise.address() || v.owner() != fundraiser_account.address() {
-            return Err(ProgramError::InvalidAccountData);
-        }
         v.amount()
     };
-
     if !(vault_amount >= amount_to_raise) {
         return Err(FundraiserError::TargetNotMet.into());
     }

@@ -6,7 +6,7 @@ use pinocchio::{
 };
 use pinocchio_pubkey::derive_address;
 use pinocchio_system::instructions::CreateAccount;
-use pinocchio_token::{instructions::Transfer, state::Mint};
+use pinocchio_token::instructions::Transfer;
 
 use crate::{
     constants::{MAX_CONTRIBUTION_PERCENTAGE, PERCENTAGE_SCALER, SECONDS_TO_DAYS},
@@ -17,7 +17,6 @@ use crate::{
 pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
     let [
         contributor,
-        mint_to_raise,
         fundraiser_account,
         contributor_account,
         contributor_ata,
@@ -35,15 +34,9 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     }
     let amount = u64::from_le_bytes(data[0..8].try_into().unwrap());
 
-    let decimals = Mint::from_account_view(mint_to_raise)?.decimals();
-
     let fundraiser_key = *fundraiser_account.address();
-
     let fundraiser_state = Fundraiser::from_account_info(fundraiser_account)?;
 
-    if fundraiser_state.mint_to_raise != *mint_to_raise.address().as_array() {
-        return Err(ProgramError::InvalidAccountData);
-    }
     let expected_fundraiser = derive_address(
         &[b"fundraiser".as_ref(), fundraiser_state.maker.as_ref()],
         Some(fundraiser_state.bump),
@@ -52,10 +45,14 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     if expected_fundraiser != *fundraiser_key.as_array() {
         return Err(ProgramError::InvalidSeeds);
     }
+    if *vault.address().as_array() != fundraiser_state.vault {
+        return Err(ProgramError::InvalidAccountData);
+    }
 
     let max_contribution =
         fundraiser_state.amount_to_raise() * MAX_CONTRIBUTION_PERCENTAGE / PERCENTAGE_SCALER;
 
+    // Contributor PDA stays canonical so a wallet gets exactly one account (hard 10% cap).
     let (contributor_pda, contributor_bump) = Address::find_program_address(
         &[b"contributor", fundraiser_key.as_ref(), contributor.address().as_ref()],
         &crate::ID,
@@ -63,7 +60,8 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     if &contributor_pda != contributor_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
-    if !contributor_account.owned_by(&crate::ID) {
+    let created = !contributor_account.owned_by(&crate::ID);
+    if created {
         let bump_bytes = [contributor_bump];
         let signer_seeds = [
             Seed::from(b"contributor"),
@@ -82,8 +80,11 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
     }
 
     let contributor_state = Contributor::from_account_info(contributor_account)?;
+    if created {
+        contributor_state.set_bump(contributor_bump);
+    }
 
-    if !(amount > 1u64.pow(decimals as u32)) {
+    if amount <= 1 {
         return Err(FundraiserError::ContributionTooSmall.into());
     }
     if !(amount <= max_contribution) {

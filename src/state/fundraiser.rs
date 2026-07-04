@@ -12,10 +12,11 @@ pub struct Fundraiser {
     pub time_started: [u8; 8],
     pub duration: u8,
     pub bump: u8,
+    pub vault: [u8; 32],
 }
 
 impl Fundraiser {
-    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 1 + 1;
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 1 + 1 + 32;
 
     pub fn from_account_info(account_info: &mut AccountView) -> Result<&mut Self, ProgramError> {
         let data = unsafe { account_info.borrow_unchecked_mut() };
@@ -52,6 +53,10 @@ impl Fundraiser {
 
     pub fn set_bump(&mut self, bump: u8) {
         self.bump = bump;
+    }
+
+    pub fn set_vault(&mut self, vault: &Address) {
+        self.vault.copy_from_slice(vault.as_ref());
     }
 
     pub fn amount_to_raise(&self) -> u64 {

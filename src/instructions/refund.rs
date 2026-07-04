@@ -1,5 +1,5 @@
 use pinocchio::{
-    Address, AccountView, ProgramResult,
+    AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
     sysvars::{Sysvar, clock::Clock},
@@ -17,7 +17,6 @@ pub fn process_refund_instruction(accounts: &mut [AccountView], _data: &[u8]) ->
     let [
         contributor,
         maker,
-        mint_to_raise,
         fundraiser_account,
         contributor_account,
         contributor_ata,
@@ -35,38 +34,24 @@ pub fn process_refund_instruction(accounts: &mut [AccountView], _data: &[u8]) ->
 
     let fundraiser_key = *fundraiser_account.address();
 
-    let (fmint, amount_to_raise, duration, time_started, bump, current_amount) = {
+    let (amount_to_raise, duration, time_started, bump, current_amount, vault_pin) = {
         let f = Fundraiser::from_account_info(fundraiser_account)?;
         (
-            f.mint_to_raise,
             f.amount_to_raise(),
             f.duration,
             f.time_started(),
             f.bump,
             f.current_amount(),
+            f.vault,
         )
     };
 
-    if fmint != *mint_to_raise.address().as_array() {
-        return Err(ProgramError::InvalidAccountData);
-    }
     let expected_fundraiser = derive_address(
         &[b"fundraiser".as_ref(), maker.address().as_ref()],
         Some(bump),
         &crate::ID.to_bytes(),
     );
     if expected_fundraiser != *fundraiser_key.as_array() {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // Bind the contributor account to the signer: it must be the PDA derived from
-    // (fundraiser, this signer). Without this, any signer could pass another
-    // contributor's account and drain their recorded amount to their own ATA.
-    let (expected_contributor, _) = Address::find_program_address(
-        &[b"contributor", fundraiser_key.as_ref(), contributor.address().as_ref()],
-        &crate::ID,
-    );
-    if &expected_contributor != contributor_account.address() {
         return Err(ProgramError::InvalidSeeds);
     }
 
@@ -77,21 +62,30 @@ pub fn process_refund_instruction(accounts: &mut [AccountView], _data: &[u8]) ->
         return Err(FundraiserError::FundraiserNotEnded.into());
     }
 
+    if *vault.address().as_array() != vault_pin {
+        return Err(ProgramError::InvalidAccountData);
+    }
     let vault_amount = {
         let v = TokenAccount::from_account_view(vault)?;
-        if v.mint() != mint_to_raise.address() || v.owner() != fundraiser_account.address() {
-            return Err(ProgramError::InvalidAccountData);
-        }
         v.amount()
     };
     if !(vault_amount < amount_to_raise) {
         return Err(FundraiserError::TargetMet.into());
     }
 
-    let refund_amount = {
+    // Bind the contributor account to the signer (theft fix), using the stored canonical bump.
+    let (refund_amount, cbump) = {
         let c = Contributor::from_account_info(contributor_account)?;
-        c.amount()
+        (c.amount(), c.bump)
     };
+    let expected_contributor = derive_address(
+        &[b"contributor".as_ref(), fundraiser_key.as_ref(), contributor.address().as_ref()],
+        Some(cbump),
+        &crate::ID.to_bytes(),
+    );
+    if expected_contributor != *contributor_account.address().as_array() {
+        return Err(ProgramError::InvalidSeeds);
+    }
 
     let bump_bytes = [bump];
     let signer_seeds = [
