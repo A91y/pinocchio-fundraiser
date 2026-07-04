@@ -10,6 +10,7 @@ mod instructions;
 mod state;
 mod constants;
 mod error;
+mod tests;
 
 entrypoint!(process_instruction);
 
