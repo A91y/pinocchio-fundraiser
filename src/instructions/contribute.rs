@@ -49,8 +49,11 @@ pub fn process_contribute_instruction(accounts: &mut [AccountView], data: &[u8])
         return Err(ProgramError::InvalidAccountData);
     }
 
-    let max_contribution =
-        fundraiser_state.amount_to_raise() * MAX_CONTRIBUTION_PERCENTAGE / PERCENTAGE_SCALER;
+    let max_contribution = fundraiser_state
+        .amount_to_raise()
+        .checked_mul(MAX_CONTRIBUTION_PERCENTAGE)
+        .ok_or(ProgramError::ArithmeticOverflow)?
+        / PERCENTAGE_SCALER;
 
     // Contributor PDA stays canonical so a wallet gets exactly one account (hard 10% cap).
     let (contributor_pda, contributor_bump) = Address::find_program_address(

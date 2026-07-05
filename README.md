@@ -49,7 +49,7 @@ Compute units (litesvm):
 | Instruction | Before | Phase 1 | Phase 2 |
 |---|---|---|---|
 | initialize | 19506 | 1896 | 1774 |
-| contribute | 4575 | 4507 | 4383 |
+| contribute | 4575 | 4507 | 4447 |
 | check_contributions | 17755 | 1496 | 1496 |
 | refund | 4879 | 2048 | 2048 |
 
